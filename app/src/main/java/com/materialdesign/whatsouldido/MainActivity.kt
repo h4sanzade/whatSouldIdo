@@ -1,149 +1,204 @@
-package com.materialdesign.whatsouldido
+import android.content.Intent
+import android.widget.ArrayAdapter
+import android.widget.Toast
 
-import android.animation.ObjectAnimator
-import android.content.Context
-import android.os.Bundle
-import android.view.LayoutInflater
-import android.widget.*
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
-import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.content.ContextCompat
-import java.util.*
+// MainActivity.kt içinde yeni fonksiyonlar ve değişkenler
 
-class MainActivity : AppCompatActivity() {
+private lateinit var categoryChipGroup: ChipGroup
+private lateinit var favoriteButton: ImageButton
+private lateinit var settingsButton: ImageButton
 
-    private lateinit var mainLayout: ConstraintLayout
-    private lateinit var suggestionTextView: TextView
-    private lateinit var generateButton: Button
-    private lateinit var addButton: Button
-    private lateinit var manageButton: Button
-    private lateinit var emojiTextView: TextView
-    private lateinit var countTextView: TextView
+private val favorites = mutableSetOf<String>()
 
-    private val suggestionManager = SuggestionManager()
-    private val animationManager = AnimationManager()
-    private val themeManager = ThemeManager()
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    setContentView(R.layout.activity_main)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+    initViews()
+    loadData()
+    setupClickListeners()
+    setupCategoryChips()
+    loadFavorites()
 
-        initViews()
-        loadData()
-        setupClickListeners()
-        updateTheme()
+    // Tema ayarlarını yükle
+    themeManager.loadThemeSettings(this)
+    updateTheme()
+}
+
+private fun initViews() {
+    // Mevcut kodlar...
+    categoryChipGroup = findViewById(R.id.categoryChipGroup)
+    favoriteButton = findViewById(R.id.favoriteButton)
+    settingsButton = findViewById(R.id.settingsButton)
+}
+
+private fun setupCategoryChips() {
+    categoryChipGroup.removeAllViews()
+
+    // Tüm kategoriler için chip
+    val allChip = Chip(this)
+    allChip.text = "Tümü"
+    allChip.isCheckable = true
+    allChip.isChecked = true
+    allChip.setChipBackgroundColorResource(R.color.colorPrimary)
+    categoryChipGroup.addView(allChip)
+
+    // Diğer kategoriler için chip'ler
+    for (category in suggestionManager.getCategories()) {
+        val chip = Chip(this)
+        chip.text = "${category.emoji} ${category.name}"
+        chip.isCheckable = true
+        chip.chipBackgroundColor = ColorStateList.valueOf(category.color)
+        categoryChipGroup.addView(chip)
     }
 
-    private fun initViews() {
-        mainLayout = findViewById(R.id.mainLayout)
-        suggestionTextView = findViewById(R.id.suggestionTextView)
-        generateButton = findViewById(R.id.generateButton)
-        addButton = findViewById(R.id.addButton)
-        manageButton = findViewById(R.id.manageButton)
-        emojiTextView = findViewById(R.id.emojiTextView)
-        countTextView = findViewById(R.id.countTextView)
+    // Chip seçildiğinde filtreleme yapılsın
+    categoryChipGroup.setOnCheckedChangeListener { group, checkedId ->
+        // Kategori filtrelemesi yapacağız
+    }
+}
+
+private fun setupClickListeners() {
+    // Mevcut kodlar...
+
+    favoriteButton.setOnClickListener {
+        toggleFavorite(suggestionTextView.text.toString())
     }
 
-    private fun loadData() {
-        suggestionManager.loadSuggestions(this)
-        if (suggestionManager.getSuggestions().isEmpty()) {
-            suggestionManager.addDefaultSuggestions()
-            suggestionManager.saveSuggestions(this)
+    settingsButton.setOnClickListener {
+        showSettingsDialog()
+    }
+}
+
+private fun generateRandomSuggestion() {
+    // Mevcut kodlar...
+
+    // Favori durumunu güncelle
+    updateFavoriteButton(suggestion)
+}
+
+private fun toggleFavorite(suggestion: String) {
+    if (suggestion.isEmpty() || suggestion == "Öneri için butona tıkla!") return
+
+    if (favorites.contains(suggestion)) {
+        favorites.remove(suggestion)
+        favoriteButton.setImageResource(android.R.drawable.btn_star_big_off)
+    } else {
+        favorites.add(suggestion)
+        favoriteButton.setImageResource(android.R.drawable.btn_star_big_on)
+
+        // Favoriye eklendiğinde animasyon
+        val scaleX = ObjectAnimator.ofFloat(favoriteButton, "scaleX", 1f, 1.3f, 1f)
+        val scaleY = ObjectAnimator.ofFloat(favoriteButton, "scaleY", 1f, 1.3f, 1f)
+        scaleX.duration = 300
+        scaleY.duration = 300
+        AnimatorSet().apply {
+            playTogether(scaleX, scaleY)
+            start()
         }
     }
 
-    private fun setupClickListeners() {
-        generateButton.setOnClickListener {
-            generateRandomSuggestion()
-        }
+    saveFavorites()
+}
 
-        addButton.setOnClickListener {
-            showAddSuggestionDialog()
-        }
+private fun updateFavoriteButton(suggestion: String) {
+    if (favorites.contains(suggestion)) {
+        favoriteButton.setImageResource(android.R.drawable.btn_star_big_on)
+    } else {
+        favoriteButton.setImageResource(android.R.drawable.btn_star_big_off)
+    }
+}
 
-        manageButton.setOnClickListener {
-            showManageSuggestionsDialog()
-        }
+private fun loadFavorites() {
+    val sharedPrefs = getSharedPreferences("NeYapsamPrefs", Context.MODE_PRIVATE)
+    val favoritesSet = sharedPrefs.getStringSet("favorites", null)
+    favorites.clear()
+    if (favoritesSet != null) {
+        favorites.addAll(favoritesSet)
+    }
+}
+
+private fun saveFavorites() {
+    val sharedPrefs = getSharedPreferences("NeYapsamPrefs", Context.MODE_PRIVATE)
+    val editor = sharedPrefs.edit()
+    editor.putStringSet("favorites", favorites)
+    editor.apply()
+}
+
+private fun showSettingsDialog() {
+    val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_settings, null)
+
+    val themeRadioGroup = dialogView.findViewById<RadioGroup>(R.id.themeRadioGroup)
+    val statsButton = dialogView.findViewById<Button>(R.id.statisticsButton)
+    val favoritesButton = dialogView.findViewById<Button>(R.id.favoritesButton)
+
+    // Mevcut tema seçeneğini işaretle
+    when (themeManager.currentTheme) {
+        "system" -> themeRadioGroup.check(R.id.radioSystem)
+        "light" -> themeRadioGroup.check(R.id.radioLight)
+        "dark" -> themeRadioGroup.check(R.id.radioDark)
+        "custom" -> themeRadioGroup.check(R.id.radioCustom)
     }
 
-    private fun updateTheme() {
-        themeManager.checkDayNightTheme()
-        themeManager.updateBackground(this, mainLayout, suggestionTextView, countTextView)
-    }
-
-    private fun generateRandomSuggestion() {
-        if (suggestionManager.getSuggestions().isEmpty()) {
-            Toast.makeText(this, "Hiç öneri yok! Eklemen gerekiyor.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val suggestion = suggestionManager.getRandomSuggestion()
-        suggestionManager.incrementSuggestionCount(suggestion)
-        suggestionManager.saveSuggestions(this)
-
-        animationManager.animateSuggestion(suggestionTextView, suggestion)
-        updateEmoji(suggestion)
-        updateCount(suggestion)
-    }
-
-    private fun updateEmoji(suggestion: String) {
-        val emoji = suggestionManager.getEmojiForSuggestion(suggestion)
-        emojiTextView.text = emoji
-        animationManager.animateEmoji(emojiTextView)
-    }
-
-    private fun updateCount(suggestion: String) {
-        val count = suggestionManager.getSuggestionCount(suggestion)
-        countTextView.text = "Bu öneri $count kez çıktı"
-
-        val fadeIn = ObjectAnimator.ofFloat(countTextView, "alpha", 0f, 1f)
-        fadeIn.duration = 500
-        fadeIn.start()
-    }
-
-    private fun showAddSuggestionDialog() {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_add_suggestion, null)
-        val editText = dialogView.findViewById<EditText>(R.id.suggestionEditText)
-
-        AlertDialog.Builder(this)
-            .setTitle("Öneri Ekle")
-            .setView(dialogView)
-            .setPositiveButton("Ekle") { _, _ ->
-                val newSuggestion = editText.text.toString().trim()
-                if (newSuggestion.isNotEmpty()) {
-                    suggestionManager.addSuggestion(newSuggestion)
-                    suggestionManager.saveSuggestions(this)
-                    Toast.makeText(this, "Öneri eklendi!", Toast.LENGTH_SHORT).show()
-                }
+    val dialog = AlertDialog.Builder(this)
+        .setTitle("Ayarlar")
+        .setView(dialogView)
+        .setPositiveButton("Tamam") { _, _ ->
+            // Tema seçimini kaydet
+            val selectedId = themeRadioGroup.checkedRadioButtonId
+            val selectedTheme = when (selectedId) {
+                R.id.radioSystem -> "system"
+                R.id.radioLight -> "light"
+                R.id.radioDark -> "dark"
+                R.id.radioCustom -> "custom"
+                else -> "system"
             }
-            .setNegativeButton("İptal", null)
-            .show()
-    }
 
-    private fun showManageSuggestionsDialog() {
-        if (suggestionManager.getSuggestions().isEmpty()) {
-            Toast.makeText(this, "Yönetilecek öneri yok!", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_manage_suggestions, null)
-        val listView = dialogView.findViewById<ListView>(R.id.suggestionsListView)
-
-        val adapter = SuggestionsAdapter(
-            this,
-            suggestionManager.getSuggestions(),
-            onDelete = { position ->
-                suggestionManager.removeSuggestion(position)
-                suggestionManager.saveSuggestions(this)
+            if (selectedTheme != themeManager.currentTheme) {
+                themeManager.setTheme(selectedTheme, this)
+                updateTheme()
             }
-        )
-        listView.adapter = adapter
+        }
+        .setNegativeButton("İptal", null)
+        .create()
 
-        AlertDialog.Builder(this)
-            .setTitle("Önerileri Yönet")
-            .setView(dialogView)
-            .setPositiveButton("Tamam", null)
-            .show()
+    statsButton.setOnClickListener {
+        dialog.dismiss()
+        showStatisticsActivity()
     }
+
+    favoritesButton.setOnClickListener {
+        dialog.dismiss()
+        showFavoritesDialog()
+    }
+
+    dialog.show()
+}
+
+private fun showStatisticsActivity() {
+    // Buraya istatistik aktivitesine geçiş kodu gelecek
+    val intent = Intent(this, StatisticsActivity::class.java)
+    startActivity(intent)
+}
+
+private fun showFavoritesDialog() {
+    if (favorites.isEmpty()) {
+        Toast.makeText(this, "Henüz favori önerin yok!", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    val favoritesList = favorites.toList()
+    val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, favoritesList)
+
+    AlertDialog.Builder(this)
+        .setTitle("Favori Önerilerim")
+        .setAdapter(adapter) { _, position ->
+            val selectedSuggestion = favoritesList[position]
+            animationManager.animateSuggestion(suggestionTextView, selectedSuggestion)
+            updateEmoji(selectedSuggestion)
+            updateCount(selectedSuggestion)
+            updateFavoriteButton(selectedSuggestion)
+        }
+        .setPositiveButton("Tamam", null)
+        .show()
 }

@@ -1,124 +1,125 @@
-package com.materialdesign.whatsouldido
+// SuggestionManager.kt içinde yeni değişkenler ve fonksiyonlar
+private val categories = mutableListOf<Category>()
+private val suggestionCategories = mutableMapOf<String, String>() // suggestion -> categoryId
 
-import android.content.Context
-import org.json.JSONArray
-import org.json.JSONException
-import org.json.JSONObject
-import java.util.*
+fun getCategories(): List<Category> = categories
 
-class SuggestionManager {
-    private val suggestionsList = mutableListOf<String>()
-    private val suggestionCounts = mutableMapOf<String, Int>()
+fun addCategory(category: Category) {
+    categories.add(category)
+}
 
-    private val emojiMap = mapOf(
-        "Film izle" to "\uD83C\uDFAC",
-        "Kitap oku" to "\uD83D\uDCDA",
-        "Yürüyüş yap" to "\uD83D\uDEB6",
-        "Müzik dinle" to "\uD83C\uDFB6",
-        "Uyu" to "\uD83D\uDE34",
-        "Yeni bir yemek tarifi dene" to "\uD83C\uDF72",
-        "Arkadaşını ara" to "\uD83D\uDCDE",
-        "Meditasyon yap" to "\uD83E\uDD2C",
-        "Dışarı çık" to "\uD83D\uDEAB",
-        "Alışveriş yap" to "\uD83D\uDED2"
+fun getCategoryForSuggestion(suggestion: String): Category? {
+    val categoryId = suggestionCategories[suggestion] ?: return null
+    return categories.find { it.id == categoryId }
+}
+
+fun setSuggestionCategory(suggestion: String, categoryId: String) {
+    suggestionCategories[suggestion] = categoryId
+}
+
+// loadSuggestions ve saveSuggestions'u güncelleyelim
+fun loadSuggestions(context: Context) {
+    // Mevcut kodlar...
+
+    // Kategorileri yükle
+    val categoriesJson = sharedPrefs.getString("categories", null)
+    val suggestionCategoriesJson = sharedPrefs.getString("suggestionCategories", null)
+
+    categories.clear()
+
+    if (categoriesJson != null) {
+        try {
+            val jsonArray = JSONArray(categoriesJson)
+            for (i in 0 until jsonArray.length()) {
+                val catObj = jsonArray.getJSONObject(i)
+                categories.add(Category(
+                    id = catObj.getString("id"),
+                    name = catObj.getString("name"),
+                    color = catObj.getInt("color"),
+                    emoji = catObj.getString("emoji")
+                ))
+            }
+        } catch (e: JSONException) {
+            e.printStackTrace()
+        }
+    }
+
+    if (suggestionCategoriesJson != null) {
+        try {
+            val jsonObj = JSONObject(suggestionCategoriesJson)
+            val keys = jsonObj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                suggestionCategories[key] = jsonObj.getString(key)
+            }
+        } catch (e: JSONException) {
+            e.printStackTrace()
+        }
+    }
+
+    // Eğer kategori yoksa varsayılanları ekleyelim
+    if (categories.isEmpty()) {
+        categories.addAll(Category.getDefaultCategories())
+    }
+}
+
+fun saveSuggestions(context: Context) {
+    // Mevcut kodlar...
+
+    // Kategorileri kaydet
+    val categoriesArray = JSONArray()
+    for (category in categories) {
+        val catObj = JSONObject()
+        catObj.put("id", category.id)
+        catObj.put("name", category.name)
+        catObj.put("color", category.color)
+        catObj.put("emoji", category.emoji)
+        categoriesArray.put(catObj)
+    }
+
+    val suggestionCategoriesObj = JSONObject()
+    for ((suggestion, categoryId) in suggestionCategories) {
+        suggestionCategoriesObj.put(suggestion, categoryId)
+    }
+
+    editor.putString("categories", categoriesArray.toString())
+    editor.putString("suggestionCategories", suggestionCategoriesObj.toString())
+    editor.apply()
+}
+
+// DefaultSuggestions fonksiyonunu güncelleyelim
+fun addDefaultSuggestions() {
+    val defaults = mapOf(
+        // Eğlence kategorisi önerileri
+        "Film izle" to "Eğlence",
+        "Müzik dinle" to "Eğlence",
+        "Bilgisayar oyunu oyna" to "Eğlence",
+        "Bulmaca çöz" to "Eğlence",
+
+        // Sağlık kategorisi önerileri
+        "Yürüyüş yap" to "Sağlık",
+        "Meditasyon yap" to "Sağlık",
+        "Spor yap" to "Sağlık",
+        "Sağlıklı bir öğün hazırla" to "Sağlık",
+
+        // Üretkenlik kategorisi önerileri
+        "Kitap oku" to "Üretkenlik",
+        "Yeni bir beceri öğren" to "Üretkenlik",
+        "To-do listeni güncelle" to "Üretkenlik",
+        "Çalışma alanını düzenle" to "Üretkenlik",
+
+        // Sosyal kategorisi önerileri
+        "Arkadaşını ara" to "Sosyal",
+        "Aile ile vakit geçir" to "Sosyal",
+        "Dışarı çık" to "Sosyal",
+        "Sosyal medyada paylaşım yap" to "Sosyal"
     )
 
-    fun getSuggestions(): MutableList<String> = suggestionsList
-
-    fun getSuggestionCount(suggestion: String): Int = suggestionCounts[suggestion] ?: 0
-
-    fun getRandomSuggestion(): String {
-        val randomIndex = Random().nextInt(suggestionsList.size)
-        return suggestionsList[randomIndex]
-    }
-
-    fun getEmojiForSuggestion(suggestion: String): String {
-        return emojiMap[suggestion] ?: "❓"
-    }
-
-    fun addSuggestion(suggestion: String) {
+    for ((suggestion, categoryName) in defaults) {
         suggestionsList.add(suggestion)
-    }
-
-    fun removeSuggestion(position: Int) {
-        if (position >= 0 && position < suggestionsList.size) {
-            suggestionsList.removeAt(position)
+        val category = categories.find { it.name == categoryName }
+        category?.let {
+            suggestionCategories[suggestion] = it.id
         }
-    }
-
-    fun incrementSuggestionCount(suggestion: String) {
-        val currentCount = suggestionCounts[suggestion] ?: 0
-        suggestionCounts[suggestion] = currentCount + 1
-    }
-
-    fun loadSuggestions(context: Context) {
-        val sharedPrefs = context.getSharedPreferences("NeYapsamPrefs", Context.MODE_PRIVATE)
-        val suggestionsJson = sharedPrefs.getString("suggestions", null)
-        val countsJson = sharedPrefs.getString("counts", null)
-
-        suggestionsList.clear()
-        suggestionCounts.clear()
-
-        if (suggestionsJson != null) {
-            try {
-                val jsonArray = JSONArray(suggestionsJson)
-                for (i in 0 until jsonArray.length()) {
-                    suggestionsList.add(jsonArray.getString(i))
-                }
-            } catch (e: JSONException) {
-                e.printStackTrace()
-            }
-        }
-
-        if (countsJson != null) {
-            try {
-                val jsonArray = JSONArray(countsJson)
-                for (i in 0 until jsonArray.length()) {
-                    val item = jsonArray.getJSONObject(i)
-                    suggestionCounts[item.getString("suggestion")] = item.getInt("count")
-                }
-            } catch (e: JSONException) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    fun saveSuggestions(context: Context) {
-        val sharedPrefs = context.getSharedPreferences("NeYapsamPrefs", Context.MODE_PRIVATE)
-        val editor = sharedPrefs.edit()
-
-        val jsonArray = JSONArray()
-        for (suggestion in suggestionsList) {
-            jsonArray.put(suggestion)
-        }
-
-        val countsArray = JSONArray()
-        for ((suggestion, count) in suggestionCounts) {
-            val countObj = JSONObject()
-            countObj.put("suggestion", suggestion)
-            countObj.put("count", count)
-            countsArray.put(countObj)
-        }
-
-        editor.putString("suggestions", jsonArray.toString())
-        editor.putString("counts", countsArray.toString())
-        editor.apply()
-    }
-
-    fun addDefaultSuggestions() {
-        val defaults = listOf(
-            "Film izle",
-            "Kitap oku",
-            "Yürüyüş yap",
-            "Müzik dinle",
-            "Uyu",
-            "Yeni bir yemek tarifi dene",
-            "Arkadaşını ara",
-            "Meditasyon yap",
-            "Dışarı çık",
-            "Alışveriş yap"
-        )
-
-        suggestionsList.addAll(defaults)
     }
 }
